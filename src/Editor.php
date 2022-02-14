@@ -46,7 +46,7 @@ class Editor extends Ext
 					break;
 				case 'update':
 					if($mdata){
-						$id=$data[$this->_id];
+						$id=$data["id"];
 						try {
 							$this->db->update($this->table,$mdata," WHERE ".$this->_id."=".$id);
 						} catch (Exception $e) {
@@ -55,8 +55,8 @@ class Editor extends Ext
 					}
 					break;
 				case 'remove':
-					if($mdata){
-						$id=$data[$this->_id];
+					if($data){
+						$id=$data['id'];
 						try {
 							$this->db->delete($this->table," WHERE ".$this->_id."=".$id);
 						} catch (Exception $e) {
@@ -119,6 +119,8 @@ class Editor extends Ext
 				}
 			}
 
+			//print_r($colmnsfiler);
+
 			if(!$clstr){
 				$clstr="*";
 			}
@@ -147,7 +149,11 @@ class Editor extends Ext
 				$orderby.=$colmns[$key['column']]." ".$key['dir'];
 			}
 
-			$sql.=" order by ".$orderby." LIMIT ".$data['start'].",".$data['length'];
+			$sql.=" order by ".$orderby;
+
+			if(intval($data['length'])>0){
+				$sql.=" LIMIT ".$data['start'].",".$data['length'];
+			}
 
 			//echo $sql;
 
@@ -196,11 +202,20 @@ class Editor extends Ext
 		}
 		return $stq.")";
 	}
+	public function getColumnName($caltname)
+	{
+		foreach($this->_fields as $col){
+			if($col->altname == $caltname){
+				return $col->name;
+			}
+		}
+	}
 	public function getCriteriaValue($criteria)
 	{
 		if(isset($criteria['criteria'])){
 			return $this->getCriteria($criteria);
 		}
+		$criteria['origData']=$this->getColumnName($criteria['origData']);
 		switch ($criteria['condition']) {
 			case 'starts':
 				return $criteria['origData']." LIKE '".$criteria['value1']."%'";
