@@ -1,6 +1,11 @@
 {
     "name": "kanneh/datatable",
     "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Kanneh\\Datatable\\": "src/"
+        }
+    },
     "authors": [
         {
             "name": "kanneh",
