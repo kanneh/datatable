@@ -71,7 +71,7 @@ class KCSLEditor{
         str+='<span class="progress p-2 pb-4 d-none"></span><button type="button" class="close" data-dismiss="modal">&times;</button>';
         str+='</div>';
         str+='<div class="modal-body">';
-        str+='<form role="form" class="form-horizontal KDTDform">';
+        str+='<form role="form" class="form-horizontal KDTDform" method="post">';
         let that=this;
         str+='<div class="form-group">';
         str+=that.getField({type:"hidden",name:"KACTION"},{KACTION:"create"});
@@ -105,18 +105,136 @@ class KCSLEditor{
             document.body.removeChild(mdl);
         });
         $(".KDTDform").on("submit",function(){
-            $(this).parent().parent().find(".progress").toggleClass("d-none").text("Processing...");
+            event.stopPropagation();
+            event.preventDefault();
+            let subdata={};
+            $(".KDTDform").serialize().split("&").forEach(re=>{
+                let ret=re.split("=");
+                subdata[ret[0]]=ret[1];
+            });
+            that.submit(subdata);
+            return false;
+        });
+    }
+    getData(subdata){
+        let mdata={};
+        this.fields.forEach(field=>{
+            field.type=field.type || "text";
+
+            if(field.type !== "editor"){
+                field.name=field.name || field.label;
+                field.altname=field.altname || field.name
+                mdata[field.altname]=subdata[field.name] || "";
+            }
+        })
+        mdata['KACTION']=subdata["KACTION"];
+        return mdata;
+    }
+    submit(subdata){
+        $(".KDTDform").parent().parent().find(".progress").toggleClass("d-none").text("Processing...");
+        let mdata={}
+        let that=this;
+        let edfilds=[];
+        this.fields.forEach(field=>{
+            field.type=field.type || "text";
+
+            if(field.type !== "editor"){
+                field.name=field.name || field.label;
+                field.altname=field.altname || field.name
+                mdata[field.altname]=subdata[field.name] || "";
+            }else{
+                edfilds.push(field);
+            }
+        });
+        if(edfilds.length>0){
+            let peflds=edfilds;
+            let redfs=0;
+            let rqedfs=edfilds.length;
+            while(peflds.length>0){
+                let field=peflds[0];
+                peflds.splice(0,1);
+                let eddata=field.editor.getData(subdata);
+                //console.log(eddata);
+                
+                let worker=new Worker("static/js/editorworker.js");
+                
+                worker.addEventListener("message",event=>{
+                    let rdata=event.data;
+                    //console.log(rdata);
+                    if((rdata.error !== undefined && rdata.error !== null) && rdata.error.length>0){
+                        that.wait=false;
+                        that.stop=true;
+                        alert(rdata.error);
+                        redfs++;
+                    }else if((rdata.error !== undefined && rdata.error !== null) && rdata.error.length === 0){
+                      that.wait=false;
+                      that.stop=false;
+                      mdata[field.rel]=rdata.lastId; 
+                      redfs++ 
+                    }
+                    if (redfs == rqedfs) {
+                        if(that.stop){
+                            return;
+                        }
+                        mdata['KACTION']=subdata["KACTION"];
+                        //console.log(mdata);
+                        let darr=[];
+                        for(let m in mdata){
+                            darr.push(m+"="+mdata[m]);
+                        }
+                        //console.log(darr.join("&"));
+                        $(".KDTDform").parent().parent().find(".progress").toggleClass("d-none").text("Processing...");
+                        $.ajax({
+                            url:that.url,
+                            type:"POST",
+                            data:darr.join("&"),
+                            success:function(data){
+                                window.dispatchEvent(new Event("addcontinue"));
+                                data=JSON.parse(data);
+                                //console.log(data);
+                                $(".KDTDform").parent().parent().find(".progress").toggleClass("d-none").text("Done");
+                                if(data.error){
+                                    alert(data.error);
+                                }else{
+                                    that.lastid=data.lastId;
+                                    let dtt=$(that.tableId).DataTable().search("").draw();
+                                    dtt.ajax.reload();
+                                    $(".KDTD").modal('hide');
+                                }
+                            },
+                            error:function(err,errstr,xhr){
+                                window.dispatchEvent(new Event("addcontinue"));
+                                alert(err+errstr);
+                                //console.log(err);
+                                //console.log(errstr);
+                                //console.log(shr);
+                            }
+                        });
+                    }
+                });
+                //console.log(field);
+                worker.postMessage({url:field.editor.url,method:"POST",data:eddata,action:"submit"});
+            }
+        }else{
+            mdata['KACTION']=subdata["KACTION"];
+            //console.log(mdata);
+            let darr=[];
+            for(let m in mdata){
+                darr.push(m+"="+mdata[m]);
+            }
+            //console.log(darr.join("&"));
             $.ajax({
                 url:that.url,
-                method:"POST",
-                data:$(this).serialize(),
+                type:"POST",
+                data:darr.join("&"),
                 success:function(data){
                     data=JSON.parse(data);
-                    console.log(data);
+                    //console.log(data);
                     $(".KDTDform").parent().parent().find(".progress").toggleClass("d-none").text("Done");
                     if(data.error){
                         alert(data.error);
                     }else{
+                        that.lastid=data.lastId;
                         let dtt=$(that.tableId).DataTable().search("").draw();
                         dtt.ajax.reload();
                         $(".KDTD").modal('hide');
@@ -124,13 +242,20 @@ class KCSLEditor{
                 },
                 error:function(err,errstr,xhr){
                     alert(err+errstr);
-                    console.log(err);
-                    console.log(errstr);
-                    console.log(shr);
+                    //console.log(err);
+                    //console.log(errstr);
+                    //console.log(shr);
                 }
             });
-            return false;
-        });
+        }
+    }
+    awaitToContinue(){
+        this.wait=false;
+        window.removeEventListener("addcontinue",that.awaitToContinue());
+    }
+    sleep(ms) {
+        var now = new Date().getTime();
+        while(new Date().getTime() < now + ms){}
     }
     update(data){
         let mdl=document.createElement("div");
@@ -280,6 +405,16 @@ class KCSLEditor{
             return false;
         });
     }
+    getFields(data={}){
+        let str="";
+        let that=this;
+        this.fields.forEach(field=>{
+            str+='<div class="form-group">';
+            str+=that.getField(field,data);
+            str+="</div>";
+        })
+        return str;
+    }
     getField(conf,data={},options=[]){
         conf.type=conf.type || "text";
         conf.label=conf.label || conf.name || "";
@@ -318,32 +453,34 @@ class KCSLEditor{
                 return str
             case "checkbox":
                 conf.className=conf.className.replace(/form-control/i,"");
-                str='<label>'+conf.label+'</label>';
+                str='<label>'+conf.label+'</label><div class="row">';
                 val=data[conf.name];
                 moptions=conf.options || [{text:"True",value:"True"},{text:"False",value:"False"}];
                 Array.from(moptions).forEach(opt=>{
                     if (val.indexOf(opt.value) != -1) {
-                        str+='<div><input type="checkbox" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+' selected>'+opt.text+'</div>';
+                        str+='<div class="col-md-3"><input type="checkbox" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+' selected>'+opt.text+'</div>';
                     }else{
-                        str+='<div><input type="checkbox" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+'>'+opt.text+'</div>';
+                        str+='<div class="col-md-3"><input type="checkbox" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+'>'+opt.text+'</div>';
                     }
                 });
-                str+='</select>';
+                str+='</div>';
                 return str
             case "radio":
                 conf.className=conf.className.replace(/form-control/i,"");
-                str='<label>'+conf.label+'</label>';
+                str='<label>'+conf.label+'</label><div class="row">';
                 val=data[conf.name];
                 moptions=conf.options || [{text:"True",value:"True"},{text:"False",value:"False"}];
                 Array.from(moptions).forEach(opt=>{
                     if (val.indexOf(opt.value) != -1) {
-                        str+='<div><input type="radio" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+' selected>'+opt.text+'</div>';
+                        str+='<div class="col-md-3"><input type="radio" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+' selected>'+opt.text+'</div>';
                     }else{
-                        str+='<div><input type="radio" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+'>'+opt.text+'</div>';
+                        str+='<div class="col-md-3"><input type="radio" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+'>'+opt.text+'</div>';
                     }
                 });
-                str+='</select>';
+                str+='</div>';
                 return str
+            case "editor":
+                return conf.editor.getFields(data);
             default:
                 return '<label>'+conf.label+'</label><input type="'+conf.type+'" value="'+data[conf.name]+'" class="'+conf.className+'" name="'+conf.name+'"'+attr+'>';
         }

@@ -38,6 +38,7 @@ class Editor extends Ext
 					if($mdata){
 						try {
 							$this->db->insert($this->table,$mdata);
+							$this->_out['lastId']=$this->db->lastId();
 						} catch (Exception $e) {
 							$this->_out['error']="Error: ".$e->getMessage();
 						}
@@ -274,7 +275,7 @@ class Field extends Ext
 		$this->name=$name;
 		$this->altname=$altname?$altname:$name;
 		if ($req) {
-			$this->_validators[]=Validator::inst("nonull",1,">",$reqmes);
+			$this->_validators[]=Validator::inst("nonull",0,">",$reqmes);
 		}
 	}
 	public function validators($_=null)
