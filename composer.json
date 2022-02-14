@@ -1,14 +1,9 @@
 {
     "name": "kanneh/datatable",
     "license": "MIT",
-    "autoload": {
-        "psr-4": {
-            "Kanneh\\Datatable\\": "/"
-        }
-    },
     "authors": [
         {
-            "name": "Alhaji Kanneh",
+            "name": "kanneh",
             "email": "alhajikanneh@gmail.com"
         }
     ],
