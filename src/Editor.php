@@ -180,6 +180,8 @@ class Editor extends Ext
 					}
 				}
 
+				$gfilter="";
+
 				if (strlen($this->searchstr)>0) {
 					if ($filter) {
 						$sql.=" AND ".$this->searchstr;
@@ -188,6 +190,7 @@ class Editor extends Ext
 						$sql.=" WHERE ".$this->searchstr;
 						$filter.=" WHERE ".$this->searchstr;
 					}
+					$gfilter=" WHERE ".$this->searchstr;
 				}
 
 				$orderby="";
@@ -210,7 +213,7 @@ class Editor extends Ext
 
 				$this->_out=array(
 					"draw"=>intval($data['draw']),
-					"recordsTotal"=>$this->db->count($this->table),
+					"recordsTotal"=>$this->db->count($this->table,$gfilter),
 					"recordsFiltered"=>$this->db->count($this->table,$filter),
 					"data"=>$mdata,
 					"fields"=>$this->_fields,
