@@ -5,8 +5,10 @@ namespace Kanneh\DataTable;
 class Editor extends Ext
 {
 	private $data=array();
+	private $joinstr="";
+	private $searchstr="";
 
-	function __construct($db, $tb,$id="id")
+	function __construct($db, $tb,$id="id",$customDataProcessor=null)
 	{
 		$this->db=$db;
 		$this->table=$tb;
@@ -17,6 +19,23 @@ class Editor extends Ext
 			"error"=>"",
 			"options"=>array()
 		);
+		$this->customDataProcessor=$customDataProcessor;
+	}
+
+	public function WHERE($wherestr)
+	{
+		if(is_array($wherestr)){
+			foreach($wherestr as $whr){
+				$this->WHERE($whr);
+			}
+			return $this;
+		}
+		if(strlen($this->searchstr)>0){
+			$this->searchstr.=" AND ".$wherestr;
+		}else{
+			$this->searchstr=$wherestr;
+		}
+		return $this;
 	}
 
 	public function process($data)
@@ -68,108 +87,137 @@ class Editor extends Ext
 					$this->_out['error']="Error: Unknown action.";
 			}
 		}else{
-			//print_r($data);
-			$colmns=array();
-			$colmnsfiler="";
-			for ($i=0; $i < count($data['columns']); $i++) { 
-				$col=$data['columns'][$i];
-				if($col['data']){
-					$colmns[]=$col['data'];
-				}
-				if($col['searchable'] == 'true' && $col['search']['value']){
-					$cstr="";
-					if($data['search']['value']){
-						$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
-					}else{
-						$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
-					}
-					if($colmnsfiler){
-						$colmnsfiler.=" AND".$cstr;
-					}else{
-						$colmnsfiler=$cstr;
-					}
-				}elseif($col['searchable'] == 'true' && $data['search']['value']){
-					$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
-					if($colmnsfiler){
-						$colmnsfiler.=" AND".$cstr;
-					}else{
-						$colmnsfiler=$cstr;
-					}
-				}
-			}
-			$colmns=array_merge($colmns,array($this->_id));
-
-
-
-
-			$sql="SELECT ";
-
-			/*if($colmns){
-				$sql.=implode(",", $colmns);
+			if($this->customDataProcessor){
+				require_once $this->customDataProcessor;
+				$this->_out=array(
+					"draw"=>intval($data['draw']),
+					"recordsTotal"=>$recordsTotal,
+					"recordsFiltered"=>$recordsFiltered,
+					"data"=>$reqData
+				);
 			}else{
-				$sql.="*";
-			}*/
+				//print_r($data);
+				$colmns=array();
+				$colmnsfiler="";
+				for ($i=0; $i < count($data['columns']); $i++) { 
+					$col=$data['columns'][$i];
+					if($col['data']){
+						$colmns[]=$col['data'];
+					}
+					if($col['searchable'] == 'true' && $col['search']['value']){
+						$cstr="";
+						if($data['search']['value']){
+							$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
+						}else{
+							$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
+						}
+						if($colmnsfiler){
+							$colmnsfiler.=" AND".$cstr;
+						}else{
+							$colmnsfiler=$cstr;
+						}
+					}elseif($col['searchable'] == 'true' && $data['search']['value']){
+						$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
+						if($colmnsfiler){
+							$colmnsfiler.=" AND".$cstr;
+						}else{
+							$colmnsfiler=$cstr;
+						}
+					}
+				}
+				$colmns=array_merge($colmns,array($this->_id));
 
-			$clstr="";
-			foreach($this->_fields as $col){
+
+
+
+				$sql="SELECT ";
+
+				/*if($colmns){
+					$sql.=implode(",", $colmns);
+				}else{
+					$sql.="*";
+				}*/
+
+				$clstr="";
+				$options=array();
+				//print_r($this->_fields);
+				foreach($this->_fields as $col){
+					if(!$clstr){
+						$clstr=$col->name." AS ".$col->altname;
+					}else{
+						$clstr.=", ".$col->name." AS ".$col->altname;
+					}
+					if($col->hasoption){
+						$options[$col->altname]=$col->process($this->db);
+					}
+				}
+
+				//print_r($colmnsfiler);
+
 				if(!$clstr){
-					$clstr=$col->name." AS ".$col->altname;
-				}else{
-					$clstr.=", ".$col->name." AS ".$col->altname;
+					$clstr="*";
 				}
-			}
 
-			//print_r($colmnsfiler);
+				$sql.=$clstr;
 
-			if(!$clstr){
-				$clstr="*";
-			}
-
-			$sql.=$clstr;
-
-			$sql.=" FROM ".DB_PREFIX.$this->table;
-			$filter="";
-			if ($colmnsfiler) {
-				$sql.=" WHERE".$colmnsfiler;
-				$filter=" WHERE".$colmnsfiler;
-			}
-
-			if(isset($data['searchBuilder'])){
-				if ($filter) {
-					$sql.=" AND ".$this->getCriteria($data['searchBuilder']);
-					$filter.=" AND ".$this->getCriteria($data['searchBuilder']);
-				}else{
-					$sql.=" WHERE ".$this->getCriteria($data['searchBuilder']);
-					$filter.=" WHERE ".$this->getCriteria($data['searchBuilder']);
+				$sql.=" FROM ".DB_PREFIX.$this->table;
+				$filter="";
+				if($this->joinstr){
+					$sql.=$this->joinstr;
 				}
+				if ($colmnsfiler) {
+					$sql.=" WHERE".$colmnsfiler;
+					$filter=" WHERE".$colmnsfiler;
+				}
+
+				if(isset($data['searchBuilder'])){
+					if ($filter) {
+						$sql.=" AND ".$this->getCriteria($data['searchBuilder']);
+						$filter.=" AND ".$this->getCriteria($data['searchBuilder']);
+					}else{
+						$sql.=" WHERE ".$this->getCriteria($data['searchBuilder']);
+						$filter.=" WHERE ".$this->getCriteria($data['searchBuilder']);
+					}
+				}
+
+				if (strlen($this->searchstr)>0) {
+					if ($filter) {
+						$sql.=" AND ".$this->searchstr;
+						$filter.=" AND ".$this->searchstr;
+					}else{
+						$sql.=" WHERE ".$this->searchstr;
+						$filter.=" WHERE ".$this->searchstr;
+					}
+				}
+
+				$orderby="";
+				foreach ($data['order'] as $key) {
+					$orderby.=$colmns[$key['column']]." ".$key['dir'];
+				}
+
+				$sql.=" order by ".$orderby;
+
+				if(intval($data['length'])>0){
+					$sql.=" LIMIT ".$data['start'].",".$data['length'];
+				}
+
+				//echo $sql;
+
+				$mdata=$this->db->query($sql)->rows;
+				for ($i=0; $i < count($mdata); $i++) { 
+					$mdata[$i]=array_merge($mdata[$i],array('DT_RowId'=>"row_".$mdata[$i][$this->_id]));
+				}
+
+				$this->_out=array(
+					"draw"=>intval($data['draw']),
+					"recordsTotal"=>$this->db->count($this->table),
+					"recordsFiltered"=>$this->db->count($this->table,$filter),
+					"data"=>$mdata,
+					"fields"=>$this->_fields,
+					"sql"=>$sql,
+					"options"=>$options
+				);
 			}
-
-			$orderby="";
-			foreach ($data['order'] as $key) {
-				$orderby.=$colmns[$key['column']]." ".$key['dir'];
-			}
-
-			$sql.=" order by ".$orderby;
-
-			if(intval($data['length'])>0){
-				$sql.=" LIMIT ".$data['start'].",".$data['length'];
-			}
-
-			//echo $sql;
-
-			$mdata=$this->db->query($sql)->rows;
-			for ($i=0; $i < count($mdata); $i++) { 
-				$mdata[$i]=array_merge($mdata[$i],array('DT_RowId'=>"row_".$mdata[$i][$this->_id]));
-			}
-
-			$this->_out=array(
-				"draw"=>intval($data['draw']),
-				"recordsTotal"=>$this->db->count($this->table),
-				"recordsFiltered"=>$this->db->count($this->table,$filter),
-				"data"=>$mdata,
-				"fields"=>$this->_fields,
-				"sql"=>$sql
-			);
 		}
 		return $this;
 	}
@@ -184,10 +232,21 @@ class Editor extends Ext
 		return $this;
 	}
 
-
-
-	public function json()
+	public function join($jointype,$jointable,$leftoprand,$operator,$rightoperand)
 	{
+		if($this->joinstr){
+			$this->joinstr.=" ".$jointype." join ".$jointable." on ".$leftoprand." ".$operator." ".$rightoperand;
+			return $this;
+		}
+		$this->joinstr=" ".$jointype." join ".$jointable." on ".$leftoprand." ".$operator." ".$rightoperand;
+		return $this;
+	}
+
+	public function json($rprint=true)
+	{
+		if(!$rprint){
+			return $this->_out;
+		}
 		echo json_encode($this->_out);
 	}
 
@@ -216,6 +275,7 @@ class Editor extends Ext
 			return $this->getCriteria($criteria);
 		}
 		$criteria['origData']=$this->getColumnName($criteria['origData']);
+		//print_r($criteria);
 		switch ($criteria['condition']) {
 			case 'starts':
 				return $criteria['origData']." LIKE '".$criteria['value1']."%'";
@@ -241,12 +301,23 @@ class Editor extends Ext
 			case '!=':
 				return $criteria['origData']." <> '".$criteria['value1']."'";
 				break;
+			case '<':
+				return $criteria['origData']." < '".$criteria['value1']."'";
+				break;
 			case 'null':
 				return $criteria['origData']." IS NULL";
 				break;
 			case '!null':
 				return $criteria['origData']." IS NOT NULL";
 				break;
+			case 'between':
+				return $criteria['origData']." ".$criteria['condition']." '".$criteria['value1']."' AND '".$criteria['value2']."'";
+				break;
+			case '!between':
+				return $criteria['origData']." NOT BETWEEN '".$criteria['value1']."' AND '".$criteria['value2']."'";
+				break;
+			default:
+				return $criteria['origData']." ".$criteria['condition']." '".$criteria['value1']."'";
 		}
 	}
 }
@@ -285,6 +356,8 @@ class Field extends Ext
 	public $_validators=array();
 	public $_error="";
 	public $_value="";
+	private $option=null;
+	public $hasoption=false;
 	function __construct($name,$altname=null,$req=false,$reqmes="Not all required fields have been filled")
 	{
 		$this->name=$name;
@@ -314,6 +387,65 @@ class Field extends Ext
 			}
 		}
 		return true;
+	}
+	public function option($opt)
+	{
+		$this->option=$opt;
+		$this->hasoption=true;
+		return $this;
+	}
+	public function process($db)
+	{
+		return $this->option->process($db);
+	}
+}
+
+/**
+ * Options
+ */
+class Options extends Ext
+{
+	private $table,$valuecolumn,$textcolumn;
+	private $searchstr="";
+
+	function __construct($table,$vcol=null,$tcol=null)
+	{
+		$this->table=$table;
+		$this->valuecolumn=$vcol;
+		$this->textcolumn=$tcol;
+	}
+	public function process($db)
+	{
+		if(is_array($this->table)){
+			return $this->table;
+		}
+		if (strlen($this->searchstr)>0) {
+			$this->searchstr=" WHERE ".$this->searchstr;
+		}
+		$dbdata=$db->select($this->table,array($this->textcolumn,$this->valuecolumn),$this->searchstr)->rows;
+		$rdata=array();
+		foreach ($dbdata as $dt) {
+			$rdata[]=array(
+				"text"=>$dt[$this->textcolumn],
+				"value"=>$dt[$this->valuecolumn]
+			);
+		}
+		return $rdata;
+	}
+	public function WHERE($wherestr)
+	{
+		if(is_array($wherestr)){
+			foreach($wherestr as $whr){
+				$this->WHERE($whr);
+			}
+			return $this;
+		}
+		if(strlen($this->searchstr)>0){
+			$this->searchstr.=" AND ".$wherestr;
+		}else{
+			$this->searchstr=$wherestr;
+		}
+		return $this;
 	}
 }
 
