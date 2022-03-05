@@ -1,6 +1,6 @@
 <?php
 
-namespace Kanneh\DataTable;
+namespace Kanneh\Datatable;
 
 class Editor extends Ext
 {
@@ -42,13 +42,16 @@ class Editor extends Ext
 	{
 		if($this->_propExists("KACTION",$data)){
 			$mdata=array();
-			foreach($this->_fields as $col){
-				if(isset($data[$col->altname])){
-					$mdata[$col->name]=$data[$col->altname];
-					$col->_getSet($col->_value,$data[$col->altname]);
-					if($col->hasValidators() && !$col->validate()){
-						$this->_out['error']=$col->_error;
-						return $this;
+			if($data['KACTION'] != "remove"){
+				//print_r($data['KACTION']);
+				foreach($this->_fields as $col){
+					if(isset($data[$col->altname])){
+						$mdata[$col->name]=$data[$col->altname];
+						$col->_getSet($col->_value,$data[$col->altname]);
+						if($col->hasValidators() && !$col->validate()){
+							$this->_out['error']=$col->_error;
+							return $this;
+						}
 					}
 				}
 			}
@@ -83,9 +86,24 @@ class Editor extends Ext
 						}
 					}
 					break;
+				case 'upload':
+					//print_r($data);
+					foreach($this->_fields as $col){
+						if($col->isUpload() && $col->altname == $data['feild']){
+							//echo "found";
+							$col->upload();
+							if($col->_status){
+								$this->_out['uploadedfilepath']=$col->_resultfile;
+							}else{
+								$this->_out['error']=$col->_error;
+							}
+						}
+					}
+					break;
 				default:
 					$this->_out['error']="Error: Unknown action.";
 			}
+			return $this;
 		}else{
 			if($this->customDataProcessor){
 				require_once $this->customDataProcessor;
@@ -361,6 +379,11 @@ class Field extends Ext
 	public $_value="";
 	private $option=null;
 	public $hasoption=false;
+
+	public function isUpload()
+	{
+		return false;
+	}
 	function __construct($name,$altname=null,$req=false,$reqmes="Not all required fields have been filled")
 	{
 		$this->name=$name;
@@ -400,6 +423,63 @@ class Field extends Ext
 	public function process($db)
 	{
 		return $this->option->process($db);
+	}
+}
+
+class Upload extends Field
+{
+	public $_error="";
+	public $_status=1;
+	public $allowedFileSize=500;
+	public $allowedFileTypes=array();
+	public function upload()
+	{
+		if (!isset($_FILES[$this->altname])) {
+			$this->_error="Invalid File";
+			$this->_status=0;
+			return;
+		}
+		$filetp=$_FILES[$this->altname];
+		$tgfile=$this->uploaddir.str_replace(explode(".",$filetp["name"])[0],uniqid('',true).(explode(".",$filetp["name"])[0]),$filetp["name"]);
+		if (!is_dir($this->uploaddir)) {
+			mkdir($this->uploaddir,0777,true);
+		}
+		if ($filetp['size'] > $this->allowedFileSize) {
+			$this->_error="File size: ".$filetp['size']." exceeds maximum allowed size:".$this->allowedFileSize." File not uploaded";
+			$this->_status=0;
+			return;
+		}
+		if (!in_array($filetp['type'], $this->allowedFileTypes)) {
+			$this->_error="Unsupported file type: ".$filetp['type'].". File not uploaded";
+			$this->_status=0;
+			return;
+		}
+		if (!move_uploaded_file($filetp['tmp_name'], $tgfile)) {
+			$this->_error="Unknown error occured while uploading file. File not uploaded";
+			$this->_status=0;
+			return;
+		}
+		$this->_resultfile=str_replace($this->uploaddir,"",$tgfile);
+		return;
+	}
+	public function isUpload()
+	{
+		return true;
+	}
+	public function dir($updir="/")
+	{
+		$this->uploaddir=$updir;
+		return $this;
+	}
+	public function fileType($filt=array())
+	{
+		$this->allowedFileTypes=$filt;
+		return $this;
+	}
+	public function size($sz)
+	{
+		$this->allowedFileSize=$sz;
+		return $this;
 	}
 }
 
