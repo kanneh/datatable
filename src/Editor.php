@@ -223,6 +223,7 @@ class Editor extends Ext
 				}
 
 				//echo $sql;
+				//print_r($this->db->getconnection());
 
 				$mdata=$this->db->query($sql)->rows;
 				for ($i=0; $i < count($mdata); $i++) { 
@@ -232,7 +233,7 @@ class Editor extends Ext
 				$this->_out=array(
 					"draw"=>intval($data['draw']),
 					"recordsTotal"=>$this->db->count($this->table,$gfilter),
-					"recordsFiltered"=>$this->db->count($this->table,$filter),
+					"recordsFiltered"=>count($mdata),
 					"data"=>$mdata,
 					"fields"=>$this->_fields,
 					"sql"=>$sql,
