@@ -115,31 +115,35 @@ class Editor extends Ext
 				);
 			}else{
 				//print_r($data);
+				$mycolumnsarr=array();
 				$colmns=array();
 				$colmnsfiler="";
 				for ($i=0; $i < count($data['columns']); $i++) { 
 					$col=$data['columns'][$i];
 					if($col['data']){
-						$colmns[]=$col['data'];
+						$colmns[]=$this->getColumnName($col['data']);
 					}
-					if($col['searchable'] == 'true' && $col['search']['value']){
-						$cstr="";
-						if($data['search']['value']){
-							$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
-						}else{
-							$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
-						}
-						if($colmnsfiler){
-							$colmnsfiler.=" AND".$cstr;
-						}else{
-							$colmnsfiler=$cstr;
-						}
-					}elseif($col['searchable'] == 'true' && $data['search']['value']){
-						$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
-						if($colmnsfiler){
-							$colmnsfiler.=" AND".$cstr;
-						}else{
-							$colmnsfiler=$cstr;
+					$col['data']=$this->getColumnName($col['data']);
+					if($col['data']){
+						if($col['searchable'] == 'true' && $col['search']['value']){
+							$cstr="";
+							if($data['search']['value']){
+								$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
+							}else{
+								$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
+							}
+							if($colmnsfiler){
+								$colmnsfiler.=" AND".$cstr;
+							}else{
+								$colmnsfiler=$cstr;
+							}
+						}elseif($col['searchable'] == 'true' && $data['search']['value']){
+							$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
+							if($colmnsfiler){
+								$colmnsfiler.=" AND".$cstr;
+							}else{
+								$colmnsfiler=$cstr;
+							}
 						}
 					}
 				}
@@ -290,6 +294,7 @@ class Editor extends Ext
 				return $col->name;
 			}
 		}
+		return 0;
 	}
 	public function getCriteriaValue($criteria)
 	{

@@ -60,7 +60,7 @@ class KCSLEditor{
                 );
             });
             that.table.on("xhr.dt",function(e,settings,data){
-                that.doptions=data.options;
+                if(data !== null){that.doptions=data.options};
             });
         },1000)
     }
