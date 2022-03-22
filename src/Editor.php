@@ -22,6 +22,17 @@ class Editor extends Ext
 		$this->customDataProcessor=$customDataProcessor;
 	}
 
+	public function create()
+	{
+		$sql="CREATE TABLE ".DB_PREFIX.$this->table."(";
+		foreach($this->_fields as $col){
+			$sql.=$col->name." ".$col->dbattr.",";
+		}
+		$sql=substr($sql, 0,strlen($sql)-1).")";
+		$this->db->query($sql);
+		return $this;
+	}
+
 	public function WHERE($wherestr)
 	{
 		if(is_array($wherestr)){
@@ -100,6 +111,16 @@ class Editor extends Ext
 						}
 					}
 					break;
+				case 'options':
+					$options=array();
+					//print_r($this->_fields);
+					foreach($this->_fields as $col){
+						if($col->hasoption){
+							$options[$col->altname]=$col->process($this->db);
+						}
+					}
+					$this->_out['options']=$options;
+					break;
 				default:
 					$this->_out['error']="Error: Unknown action.";
 			}
@@ -118,31 +139,33 @@ class Editor extends Ext
 				$mycolumnsarr=array();
 				$colmns=array();
 				$colmnsfiler="";
-				for ($i=0; $i < count($data['columns']); $i++) { 
-					$col=$data['columns'][$i];
-					if($col['data']){
-						$colmns[]=$this->getColumnName($col['data']);
-					}
-					$col['data']=$this->getColumnName($col['data']);
-					if($col['data']){
-						if($col['searchable'] == 'true' && $col['search']['value']){
-							$cstr="";
-							if($data['search']['value']){
-								$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
-							}else{
-								$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
-							}
-							if($colmnsfiler){
-								$colmnsfiler.=" AND".$cstr;
-							}else{
-								$colmnsfiler=$cstr;
-							}
-						}elseif($col['searchable'] == 'true' && $data['search']['value']){
-							$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
-							if($colmnsfiler){
-								$colmnsfiler.=" AND".$cstr;
-							}else{
-								$colmnsfiler=$cstr;
+				if(isset($data['columns'])){
+					for ($i=0; $i < count($data['columns']); $i++) { 
+						$col=$data['columns'][$i];
+						if($col['data']){
+							$colmns[]=$this->getColumnName($col['data']);
+						}
+						$col['data']=$this->getColumnName($col['data']);
+						if($col['data']){
+							if($col['searchable'] == 'true' && $col['search']['value']){
+								$cstr="";
+								if($data['search']['value']){
+									$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
+								}else{
+									$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
+								}
+								if($colmnsfiler){
+									$colmnsfiler.=" AND".$cstr;
+								}else{
+									$colmnsfiler=$cstr;
+								}
+							}elseif($col['searchable'] == 'true' && $data['search']['value']){
+								$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
+								if($colmnsfiler){
+									$colmnsfiler.=" AND".$cstr;
+								}else{
+									$colmnsfiler=$cstr;
+								}
 							}
 						}
 					}
@@ -215,15 +238,21 @@ class Editor extends Ext
 					$gfilter=" WHERE ".$this->searchstr;
 				}
 
-				$orderby="";
-				foreach ($data['order'] as $key) {
-					$orderby.=$colmns[$key['column']]." ".$key['dir'];
+				
+				if(isset($data['order'])){
+					$orderby="";
+					foreach ($data['order'] as $key) {
+						$orderby.=$colmns[$key['column']]." ".$key['dir'];
+					}
+					$sql.=" order by ".$orderby;
+
 				}
 
-				$sql.=" order by ".$orderby;
-
-				if(intval($data['length'])>0){
-					$sql.=" LIMIT ".$data['start'].",".$data['length'];
+				
+				if(isset($data['length'])){
+					if(intval($data['length'])>0){
+						$sql.=" LIMIT ".$data['start'].",".$data['length'];
+					}
 				}
 
 				//echo $sql;
@@ -233,9 +262,13 @@ class Editor extends Ext
 				for ($i=0; $i < count($mdata); $i++) { 
 					$mdata[$i]=array_merge($mdata[$i],array('DT_RowId'=>"row_".$mdata[$i][$this->_id]));
 				}
+				$draw=0;
+				if(isset($data['draw'])){
+					$draw=intval($data['draw']);
+				}
 
 				$this->_out=array(
-					"draw"=>intval($data['draw']),
+					"draw"=>$draw,
 					"recordsTotal"=>$this->db->count($this->table,$gfilter),
 					"recordsFiltered"=>count($mdata),
 					"data"=>$mdata,
@@ -385,6 +418,7 @@ class Field extends Ext
 	public $_value="";
 	private $option=null;
 	public $hasoption=false;
+	public $dbattr="VARCHAR(50)";
 
 	public function isUpload()
 	{
@@ -397,6 +431,11 @@ class Field extends Ext
 		if ($req) {
 			$this->_validators[]=Validator::inst("nonull",0,">",$reqmes);
 		}
+	}
+	public function dbAttr($attrb)
+	{
+		$this->dbattr=$attrb;
+		return $this;
 	}
 	public function validators($_=null)
 	{

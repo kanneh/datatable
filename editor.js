@@ -19,6 +19,14 @@ $.fn.dataTable.ext.buttons.meupdate = {
     }
 };
 
+$.fn.dataTable.ext.buttons.melink = {
+    text: 'New',
+    href:'',
+    action: function ( e, dt, node, config ) {
+        window.location.assign(config.href);
+    }
+};
+
 $.fn.dataTable.ext.buttons.medelete = {
     text: 'Remove',
     attr:{
@@ -41,6 +49,25 @@ class KCSLEditor{
         this.fields=options.fields || [];
         this.tableId=options.table;
         this.title=options.title || "Editor";
+        this.options={};
+        this.doptions={};
+        
+        let worker=new Worker("static/js/editorworker.js");
+        
+        worker.addEventListener("message",event=>{
+            let rdata=event.data;
+            //console.log(rdata);
+            if((rdata.error !== undefined && rdata.error !== null) && rdata.error.length>0){
+                alert(rdata.error);
+            }else if((rdata.error !== undefined && rdata.error !== null) && rdata.error.length === 0){
+                console.log(rdata.options);
+                that.doptions=rdata.options; 
+            }
+        });
+        //console.log(field);
+        worker.postMessage({url:this.url,method:"POST",data:{'KACTION':'options'},action:"submit"});
+
+
         setTimeout(function(){
             that.table=$(that.tableId).DataTable().search('').draw();
             that.table.on("select",function(e, dt, type, indexes){
@@ -60,7 +87,7 @@ class KCSLEditor{
                 );
             });
             that.table.on("xhr.dt",function(e,settings,data){
-                if(data !== null){that.doptions=data.options};
+                if(data !== null){that.options=data.options};
             });
         },1000)
     }
@@ -480,23 +507,23 @@ class KCSLEditor{
             case "datetime":
                 return '<label>'+conf.label+'</label><input type="'+conf.type+'-local" value="'+data[conf.name]+'" class="'+conf.className+'" name="'+conf.name+'"'+attr+'>';
             case "select":
-                str='<label>'+conf.label+'</label><select class="'+conf.className+'" name="'+conf.name+'"'+attr+'>';
+                let sstr='<label>'+conf.label+'</label><select class="'+conf.className+'" name="'+conf.name+'"'+attr+'>';
                 val=data[conf.name];
-                moptions=conf.options || this.doptions[conf.name] || [{text:"True",value:"True"},{text:"False",value:"False"}];
+                moptions=conf.options || this.doptions[conf.name] || this.options[conf.name];
                 Array.from(moptions).forEach(opt=>{
                     if (opt.value == val) {
-                        str+='<option value="'+opt.value+'" selected>'+opt.text+'</option>';
+                        sstr+='<option value="'+opt.value+'" selected>'+opt.text+'</option>';
                     }else{
-                        str+='<option value="'+opt.value+'">'+opt.text+'</option>';
+                        sstr+='<option value="'+opt.value+'">'+opt.text+'</option>';
                     }
                 });
-                str+='</select>';
-                return str
+                sstr+='</select>';
+                return sstr
             case "checkbox":
                 conf.className=conf.className.replace(/form-control/i,"");
                 str='<label>'+conf.label+'</label><div class="row">';
                 val=data[conf.name];
-                moptions=conf.options || [{text:"True",value:"True"},{text:"False",value:"False"}];
+                moptions=conf.options || this.doptions[conf.name] || this.options[conf.name];
                 Array.from(moptions).forEach(opt=>{
                     if (val.indexOf(opt.value) != -1) {
                         str+='<div class="col-md-3"><input type="checkbox" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+' selected>'+opt.text+'</div>';
@@ -510,7 +537,7 @@ class KCSLEditor{
                 conf.className=conf.className.replace(/form-control/i,"");
                 str='<label>'+conf.label+'</label><div class="row">';
                 val=data[conf.name];
-                moptions=conf.options || [{text:"True",value:"True"},{text:"False",value:"False"}];
+                moptions=conf.options || this.doptions[conf.name] || this.options[conf.name];
                 Array.from(moptions).forEach(opt=>{
                     if (val.indexOf(opt.value) != -1) {
                         str+='<div class="col-md-3"><input type="radio" class="'+conf.className+'" value="'+opt.value+'" name="'+conf.name+'[]"'+attr+' selected>'+opt.text+'</div>';
