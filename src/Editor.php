@@ -13,6 +13,7 @@ class Editor extends Ext
 		$this->db=$db;
 		$this->table=$tb;
 		$this->_fields=[];
+		$this->_constraints=[];
 		$this->_id=$id;
 		$this->_out=array(
 			"data"=>array(),
@@ -24,11 +25,18 @@ class Editor extends Ext
 
 	public function create()
 	{
+		$this->db->query("DROP TABLE IF EXISTS ".DB_PREFIX.$this->table);
 		$sql="CREATE TABLE ".DB_PREFIX.$this->table."(";
 		foreach($this->_fields as $col){
 			$sql.=$col->name." ".$col->dbattr.",";
 		}
+		if($this->_constraints){
+			foreach($this->_constraints as $cons){
+				$sql.=$cons.",";
+			}
+		}
 		$sql=substr($sql, 0,strlen($sql)-1).")";
+		// print_r($sql);
 		$this->db->query($sql);
 		return $this;
 	}
@@ -54,11 +62,19 @@ class Editor extends Ext
 		if($this->_propExists("KACTION",$data)){
 			$mdata=array();
 			if($data['KACTION'] != "remove"){
-				//print_r($data['KACTION']);
+				// print_r($data);
 				foreach($this->_fields as $col){
 					if(isset($data[$col->altname])){
-						$mdata[$col->name]=$data[$col->altname];
 						$col->_getSet($col->_value,$data[$col->altname]);
+						$mdata[$col->name]=$col->_getSet($col->_value,null);
+						if($col->hasValidators() && !$col->validate()){
+							$this->_out['error']=$col->_error;
+							return $this;
+						}
+					}elseif($col->isUpload() && isset($_FILES[$col->altname]) && $_FILES[$col->altname]['name']){
+						// print_r("process upload");
+						$col->_getSet($col->_value,null);
+						$mdata[$col->name]=$col->_value;
 						if($col->hasValidators() && !$col->validate()){
 							$this->_out['error']=$col->_error;
 							return $this;
@@ -66,63 +82,73 @@ class Editor extends Ext
 					}
 				}
 			}
-			switch ($data["KACTION"]) {
-				case 'create':
-					if($mdata){
-						try {
-							$this->db->insert($this->table,$mdata);
-							$this->_out['lastId']=$this->db->lastId();
-						} catch (Exception $e) {
-							$this->_out['error']="Error: ".$e->getMessage();
-						}
-					}
-					break;
-				case 'update':
-					if($mdata){
-						$id=$data["id"];
-						try {
-							$this->db->update($this->table,$mdata," WHERE ".$this->_id."=".$id);
-						} catch (Exception $e) {
-							$this->_out['error']="Error: ".$e->getMessage();
-						}
-					}
-					break;
-				case 'remove':
-					if($data){
-						$id=$data['id'];
-						try {
-							$this->db->delete($this->table," WHERE ".$this->_id."=".$id);
-						} catch (Exception $e) {
-							$this->_out['error']="Error: ".$e->getMessage();
-						}
-					}
-					break;
-				case 'upload':
-					//print_r($data);
-					foreach($this->_fields as $col){
-						if($col->isUpload() && $col->altname == $data['feild']){
-							//echo "found";
-							$col->upload();
-							if($col->_status){
-								$this->_out['uploadedfilepath']=$col->_resultfile;
-							}else{
-								$this->_out['error']=$col->_error;
+			if(empty($this->_out['error'])){
+				switch ($data["KACTION"]) {
+					case 'create':
+						if($mdata){
+							try {
+								$this->db->insert($this->table,$mdata);
+								$this->_out['lastId']=$this->db->lastId();
+							} catch (Exception $e) {
+								$this->_out['error']="Error: ".$e->getMessage();
 							}
 						}
-					}
-					break;
-				case 'options':
-					$options=array();
-					//print_r($this->_fields);
-					foreach($this->_fields as $col){
-						if($col->hasoption){
-							$options[$col->altname]=$col->process($this->db);
+						break;
+					case 'update':
+						if($mdata){
+							$id=$data["id"];
+							try {
+								$this->db->update($this->table,$mdata," WHERE ".$this->_id."=".$id);
+								$this->_out['lastId']=$id;
+							} catch (Exception $e) {
+								$this->_out['error']="Error: ".$e->getMessage();
+							}
 						}
-					}
-					$this->_out['options']=$options;
-					break;
-				default:
-					$this->_out['error']="Error: Unknown action.";
+						break;
+					case 'remove':
+						if($data){
+							$id=$data['id'];
+							try {
+								$data=$this->db->select($this->table,array()," WHERE ".$this->_id."=".$id)->row;
+								foreach($this->_fields as $col){
+									if($col->isUpload() && $data[$col->altname] != null){
+										unlink($col->uploaddir.$data[$col->altname]);
+									}
+								}
+								$this->db->delete($this->table," WHERE ".$this->_id."=".$id);
+								$this->_out['lastId']=$this->db->lastId();
+							} catch (Exception $e) {
+								$this->_out['error']="Error: ".$e->getMessage();
+							}
+						}
+						break;
+					case 'upload':
+						//print_r($data);
+						foreach($this->_fields as $col){
+							if($col->isUpload() && $col->altname == $data['feild']){
+								//echo "found";
+								$col->upload();
+								if($col->_status){
+									$this->_out['uploadedfilepath']=$col->_resultfile;
+								}else{
+									$this->_out['error']=$col->_error;
+								}
+							}
+						}
+						break;
+					case 'options':
+						$options=array();
+						//print_r($this->_fields);
+						foreach($this->_fields as $col){
+							if($col->hasoption){
+								$options[$col->altname]=$col->process($this->db);
+							}
+						}
+						$this->_out['options']=$options;
+						break;
+					default:
+						$this->_out['error']="Error: Unknown action.";
+				}
 			}
 			return $this;
 		}else{
@@ -162,7 +188,7 @@ class Editor extends Ext
 							}elseif($col['searchable'] == 'true' && $data['search']['value']){
 								$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
 								if($colmnsfiler){
-									$colmnsfiler.=" AND".$cstr;
+									$colmnsfiler.=" OR".$cstr;
 								}else{
 									$colmnsfiler=$cstr;
 								}
@@ -211,32 +237,30 @@ class Editor extends Ext
 					$sql.=$this->joinstr;
 				}
 				if ($colmnsfiler) {
-					$sql.=" WHERE".$colmnsfiler;
 					$filter=" WHERE".$colmnsfiler;
 				}
 
 				if(isset($data['searchBuilder'])){
 					if ($filter) {
-						$sql.=" AND ".$this->getCriteria($data['searchBuilder']);
 						$filter.=" AND ".$this->getCriteria($data['searchBuilder']);
 					}else{
-						$sql.=" WHERE ".$this->getCriteria($data['searchBuilder']);
 						$filter.=" WHERE ".$this->getCriteria($data['searchBuilder']);
 					}
 				}
 
 				$gfilter="";
+				$gsql=$sql;
 
 				if (strlen($this->searchstr)>0) {
 					if ($filter) {
-						$sql.=" AND ".$this->searchstr;
 						$filter.=" AND ".$this->searchstr;
 					}else{
-						$sql.=" WHERE ".$this->searchstr;
 						$filter.=" WHERE ".$this->searchstr;
 					}
 					$gfilter=" WHERE ".$this->searchstr;
 				}
+
+				$sql.=$filter;
 
 				
 				if(isset($data['order'])){
@@ -255,9 +279,10 @@ class Editor extends Ext
 					}
 				}
 
-				//echo $sql;
+				// echo $sql;
 				//print_r($this->db->getconnection());
-
+				// echo $sql;
+				// exit();
 				$mdata=$this->db->query($sql)->rows;
 				for ($i=0; $i < count($mdata); $i++) { 
 					$mdata[$i]=array_merge($mdata[$i],array('DT_RowId'=>"row_".$mdata[$i][$this->_id]));
@@ -266,11 +291,11 @@ class Editor extends Ext
 				if(isset($data['draw'])){
 					$draw=intval($data['draw']);
 				}
-
+				
 				$this->_out=array(
 					"draw"=>$draw,
-					"recordsTotal"=>$this->db->count($this->table,$gfilter),
-					"recordsFiltered"=>count($mdata),
+					"recordsTotal"=>count($this->db->query($gsql.$gfilter)->rows),
+					"recordsFiltered"=>count($this->db->query($gsql.$filter)->rows),
 					"data"=>$mdata,
 					"fields"=>$this->_fields,
 					"sql"=>$sql,
@@ -288,6 +313,16 @@ class Editor extends Ext
 		}
 		$this->_getSet($this->_fields,$_,true);
 		$this->_out['fields']=$this->_fields;
+		return $this;
+	}
+
+	public function constraints($_=null)
+	{
+		if($_ != null && !is_array($_)){
+			$_=func_get_args();
+		}
+		$this->_getSet($this->_constraints,$_,true);
+		$this->_out['constraints']=$this->_constraints;
 		return $this;
 	}
 
@@ -447,10 +482,13 @@ class Field extends Ext
 	}
 	public function hasValidators()
 	{
-		return count($this->_validators);
+		return count($this->_validators) || strlen($this->_error);
 	}
 	public function validate()
 	{
+		if ($this->_error) {
+			return false;
+		}
 		foreach($this->_validators as $vald){
 			if(!$vald->test($this->_value)){
 				$this->_error=$vald->message;
@@ -477,7 +515,7 @@ class Upload extends Field
 	public $_status=1;
 	public $allowedFileSize=500;
 	public $allowedFileTypes=array();
-	public function upload()
+	public function upload($setvalue=false)
 	{
 		if (!isset($_FILES[$this->altname])) {
 			$this->_error="Invalid File";
@@ -505,8 +543,38 @@ class Upload extends Field
 			return;
 		}
 		$this->_resultfile=str_replace($this->uploaddir,"",$tgfile);
+		if($setvalue){
+			$this->_value = $this->_resultfile;
+		}
+		unset($_FILES[$this->altname]);
 		return;
 	}
+
+	protected function _getSet( &$prop, $val, $array=false )
+	{
+		// echo "uploading called";
+		// Get
+		if ( $val === null && (!isset($_FILES[$this->altname]) || !$_FILES[$this->altname]['name']) ) {
+			return $prop;
+		}
+
+		// print_r($value);
+
+		// Set
+		if (isset($_FILES[$this->altname]) && $_FILES[$this->altname]['name']) {
+			// print_r("expression");
+			if(file_exists($this->uploaddir.$val) && !is_dir($this->uploaddir.$val)){
+				unlink($this->uploaddir.$val);
+			}
+			$this->upload(true);
+		}else{
+			$prop = $val;
+		}
+		
+
+		return $this;
+	}
+
 	public function isUpload()
 	{
 		return true;
