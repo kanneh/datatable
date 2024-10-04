@@ -325,10 +325,8 @@ class Editor extends Ext
 					"recordsFiltered"=>count($this->select($gsql.$filter,$this->params)),
 					"data"=>$mdata,
 					"fields"=>$this->_fields,
-					"sql"=>$sql,
 					"options"=>$options,
-					"error"=>$this->_out['error'],
-					"test"=>$this->select("SELECT * FROM lmleavehistory WHERE leavetype LIKE ?",array('%Ann%'))
+					"error"=>$this->_out['error']
 				);
 			}
 		}
