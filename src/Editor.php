@@ -2,11 +2,26 @@
 
 namespace Kanneh\Datatable;
 
+if(!defined('DB_PREFIX')){
+	define('DB_PREFIX',"");
+}
+
 class Editor extends Ext
 {
-	private $data=array();
-	private $joinstr="";
-	private $searchstr="";
+	public $data=array();
+	public $joinstr="";
+	public $searchstr="";
+	public $db;
+	public $table;
+	public $_fields;
+	public $_constraints;
+	public $_id;
+	public $_out = [];
+	public $customDataProcessor;
+	public $con;
+	private $params = array();
+
+	public $searchParams = array();
 
 	function __construct($db, $tb,$id="id",$customDataProcessor=null)
 	{
@@ -21,6 +36,8 @@ class Editor extends Ext
 			"options"=>array()
 		);
 		$this->customDataProcessor=$customDataProcessor;
+		$this->con = new \PDO($db["db"], $db["username"], $db["password"]);
+		$this->con->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 	}
 
 	public function create()
@@ -87,9 +104,9 @@ class Editor extends Ext
 					case 'create':
 						if($mdata){
 							try {
-								$this->db->insert($this->table,$mdata);
-								$this->_out['lastId']=$this->db->lastId();
-							} catch (Exception $e) {
+								$this->insert($mdata);
+								$this->_out['lastId']=$this->lastId();
+							} catch (\Exception $e) {
 								$this->_out['error']="Error: ".$e->getMessage();
 							}
 						}
@@ -98,9 +115,9 @@ class Editor extends Ext
 						if($mdata){
 							$id=$data["id"];
 							try {
-								$this->db->update($this->table,$mdata," WHERE ".$this->_id."=".$id);
+								$this->update($mdata," WHERE ".$this->_id."=?",array($id));
 								$this->_out['lastId']=$id;
-							} catch (Exception $e) {
+							} catch (\Exception $e) {
 								$this->_out['error']="Error: ".$e->getMessage();
 							}
 						}
@@ -109,15 +126,15 @@ class Editor extends Ext
 						if($data){
 							$id=$data['id'];
 							try {
-								$data=$this->db->select($this->table,array()," WHERE ".$this->_id."=".$id)->row;
+								$data=$this->select("SELECT * FROM ".$this->table." WHERE ".$this->_id."= ?",array($id))[0];
 								foreach($this->_fields as $col){
 									if($col->isUpload() && $data[$col->altname] != null){
 										unlink($col->uploaddir.$data[$col->altname]);
 									}
 								}
-								$this->db->delete($this->table," WHERE ".$this->_id."=".$id);
-								$this->_out['lastId']=$this->db->lastId();
-							} catch (Exception $e) {
+								$this->delete(" WHERE ".$this->_id."=?",array($id));
+								$this->_out['lastId']=$id;
+							} catch (\Exception $e) {
 								$this->_out['error']="Error: ".$e->getMessage();
 							}
 						}
@@ -165,6 +182,7 @@ class Editor extends Ext
 				$mycolumnsarr=array();
 				$colmns=array();
 				$colmnsfiler="";
+				$this->params=array();
 				if(isset($data['columns'])){
 					for ($i=0; $i < count($data['columns']); $i++) { 
 						$col=$data['columns'][$i];
@@ -176,9 +194,12 @@ class Editor extends Ext
 							if($col['searchable'] == 'true' && $col['search']['value']){
 								$cstr="";
 								if($data['search']['value']){
-									$cstr=" (".$col['data']." LIKE '%".$col['search']['value']."%' OR ".$col['data']." LIKE '%".$data['search']['value']."%')";
+									$cstr=" (".$col['data']." LIKE ? OR ".$col['data']." LIKE ?)";
+									$this->params[] = "%".$col['search']['value']."%";
+									$this->params[] = "%".$data['search']['value']."%";
 								}else{
-									$cstr=" ".$col['data']." LIKE '%".$col['search']['value']."%'";
+									$cstr=" ".$col['data']." LIKE ?";
+									$this->params[] = "%".$col['search']['value']."%";
 								}
 								if($colmnsfiler){
 									$colmnsfiler.=" AND".$cstr;
@@ -186,7 +207,9 @@ class Editor extends Ext
 									$colmnsfiler=$cstr;
 								}
 							}elseif($col['searchable'] == 'true' && $data['search']['value']){
-								$cstr="  ".$col['data']." LIKE '%".$data['search']['value']."%'";
+								// print_r("Data search");
+								$cstr=" ".($col['data'])." LIKE ?";
+								$this->params[] = "%".$data['search']['value']."%";
 								if($colmnsfiler){
 									$colmnsfiler.=" OR".$cstr;
 								}else{
@@ -223,7 +246,7 @@ class Editor extends Ext
 					}
 				}
 
-				//print_r($colmnsfiler);
+				// print_r($colmnsfiler);
 
 				if(!$clstr){
 					$clstr="*";
@@ -231,20 +254,20 @@ class Editor extends Ext
 
 				$sql.=$clstr;
 
-				$sql.=" FROM ".DB_PREFIX.$this->table;
+				$sql.=" FROM ".$this->table;
 				$filter="";
 				if($this->joinstr){
 					$sql.=$this->joinstr;
 				}
 				if ($colmnsfiler) {
-					$filter=" WHERE".$colmnsfiler;
+					$filter=" WHERE (".$colmnsfiler.")";
 				}
 
 				if(isset($data['searchBuilder'])){
 					if ($filter) {
-						$filter.=" AND ".$this->getCriteria($data['searchBuilder']);
+						$filter.=" AND (".$this->getCriteria($data['searchBuilder']).")";
 					}else{
-						$filter.=" WHERE ".$this->getCriteria($data['searchBuilder']);
+						$filter.=" WHERE (".$this->getCriteria($data['searchBuilder']).")";
 					}
 				}
 
@@ -253,11 +276,15 @@ class Editor extends Ext
 
 				if (strlen($this->searchstr)>0) {
 					if ($filter) {
-						$filter.=" AND ".$this->searchstr;
+						$filter.=" AND (".$this->searchstr.")";
 					}else{
-						$filter.=" WHERE ".$this->searchstr;
+						$filter.=" WHERE (".$this->searchstr.")";
 					}
-					$gfilter=" WHERE ".$this->searchstr;
+					$gfilter=" WHERE (".$this->searchstr.")";
+
+					for ($i=0; $i < count($this->searchParams); $i++) { 
+						$this->params[] = $this->searchParams[$i];
+					}
 				}
 
 				$sql.=$filter;
@@ -283,7 +310,7 @@ class Editor extends Ext
 				//print_r($this->db->getconnection());
 				// echo $sql;
 				// exit();
-				$mdata=$this->db->query($sql)->rows;
+				$mdata=$this->select($sql,$this->params);
 				for ($i=0; $i < count($mdata); $i++) { 
 					$mdata[$i]=array_merge($mdata[$i],array('DT_RowId'=>"row_".$mdata[$i][$this->_id]));
 				}
@@ -294,12 +321,14 @@ class Editor extends Ext
 				
 				$this->_out=array(
 					"draw"=>$draw,
-					"recordsTotal"=>count($this->db->query($gsql.$gfilter)->rows),
-					"recordsFiltered"=>count($this->db->query($gsql.$filter)->rows),
+					"recordsTotal"=>count($this->select($gsql.$gfilter,$this->searchParams)),
+					"recordsFiltered"=>count($this->select($gsql.$filter,$this->params)),
 					"data"=>$mdata,
 					"fields"=>$this->_fields,
 					"sql"=>$sql,
-					"options"=>$options
+					"options"=>$options,
+					"error"=>$this->_out['error'],
+					"test"=>$this->select("SELECT * FROM lmleavehistory WHERE leavetype LIKE ?",array('%Ann%'))
 				);
 			}
 		}
@@ -415,10 +444,85 @@ class Editor extends Ext
 				return $criteria['origData']." ".$criteria['condition']." '".$criteria['value1']."'";
 		}
 	}
+
+	
+	public function select($sql='',$params=array()){
+		// print_r($params);
+		if($sql == ''){
+			$sql = "SELECT * FROM ".$this->table;
+		}
+		$mdata = $this->query($sql,$params);
+		if($mdata === FALSE){
+			return array();
+		}else{
+			return $mdata->fetchAll(\PDO::FETCH_ASSOC);
+		}
+	}
+
+	public function query($sql = '',$params = array()){
+		try {
+			$q = $this->con->prepare($sql);
+			if (!empty($params)) {
+				for ($i = 0; $i < count($params); $i++) {
+					$q->bindValue($i+1,$params[$i]);
+				}
+			}
+			$q->execute();
+			return $q;
+		} catch (\PDOException $e) {
+			$this->_out['error'] = $e->getMessage();
+			return False;
+		}catch (\ValueError $e) {
+			$this->_out['error'] = $e->getMessage();
+			return False;
+		}
+	}
+
+	public function insert($data=array())
+	{
+		$sql="INSERT INTO ".$this->table." SET ";
+		$this->params = array();
+		foreach ($data as $key => $value) {
+			$sql.=$key." = ?, ";
+			$this->params[] = $value;
+		}
+		$sql = substr($sql,0, strlen($sql) - 2);
+		return $this->query($sql,$this->params);
+	}
+
+	public function update($data=array(),$filter="",$params=array())
+	{
+		$sql="UPDATE ".$this->table." SET ";
+		$this->params = array();
+		foreach ($data as $key => $value) {
+			$sql.=$key." = ?, ";
+			$this->params[] = $value;
+		}
+		$sql = substr($sql,0, strlen($sql) - 2);
+		$sql.=$filter;
+		for ($i = 0; $i < count($params); ++$i) {
+			$this->params[] = $params[$i];
+		}
+		return $this->query($sql,$this->params);
+	}
+
+	public function delete($filter,$params)
+	{
+		$sql="DELETE FROM ".$this->table.$filter;
+		return $this->query($sql,$params);
+	}
+
+	public function lastId(){
+		return $this->con->lastInsertId();
+	}
 }
 
 class Validator extends Ext
 {
+	public $type;
+	private $value;
+	private $oper;
+	public $message;
 	function __construct($type,$value,$oper="=",$errmsg="invalid")
 	{
 		$this->type=$type;
@@ -454,6 +558,9 @@ class Field extends Ext
 	private $option=null;
 	public $hasoption=false;
 	public $dbattr="VARCHAR(50)";
+
+	public $name;
+	public $altname;
 
 	public function isUpload()
 	{
@@ -515,6 +622,9 @@ class Upload extends Field
 	public $_status=1;
 	public $allowedFileSize=500;
 	public $allowedFileTypes=array();
+
+	public $uploaddir;
+	public $_resultfile;
 	public function upload($setvalue=false)
 	{
 		if (!isset($_FILES[$this->altname])) {
