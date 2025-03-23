@@ -401,43 +401,30 @@ class Editor extends Ext
 		switch ($criteria['condition']) {
 			case 'starts':
 				return $criteria['origData']." LIKE '".$criteria['value1']."%'";
-				break;
 			case '!starts':
 				return $criteria['origData']." NOT LIKE '".$criteria['value1']."%'";
-				break;
 			case 'ends':
 				return $criteria['origData']." LIKE '%".$criteria['value1']."'";
-				break;
 			case '!ends':
 				return $criteria['origData']." NOT LIKE '%".$criteria['value1']."'";
-				break;
 			case 'contains':
 				return $criteria['origData']." LIKE '%".$criteria['value1']."%'";
-				break;
 			case '!contains':
 				return $criteria['origData']." NOT LIKE '%".$criteria['value1']."%'";
-				break;
 			case '=':
 				return $criteria['origData']." = '".$criteria['value1']."'";
-				break;
 			case '!=':
 				return $criteria['origData']." <> '".$criteria['value1']."'";
-				break;
 			case '<':
 				return $criteria['origData']." < '".$criteria['value1']."'";
-				break;
 			case 'null':
 				return $criteria['origData']." IS NULL";
-				break;
 			case '!null':
 				return $criteria['origData']." IS NOT NULL";
-				break;
 			case 'between':
 				return $criteria['origData']." ".$criteria['condition']." '".$criteria['value1']."' AND '".$criteria['value2']."'";
-				break;
 			case '!between':
 				return $criteria['origData']." NOT BETWEEN '".$criteria['value1']."' AND '".$criteria['value2']."'";
-				break;
 			default:
 				return $criteria['origData']." ".$criteria['condition']." '".$criteria['value1']."'";
 		}
