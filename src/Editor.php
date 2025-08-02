@@ -21,6 +21,7 @@ class Editor extends Ext
 	public $con;
 	private $params = array();
 
+
 	public $searchParams = array();
 
 	function __construct($db, $tb,$id="id",$customDataProcessor=null)
@@ -42,7 +43,7 @@ class Editor extends Ext
 
 	public function create()
 	{
-		$this->db->query("DROP TABLE IF EXISTS ".DB_PREFIX.$this->table);
+		$this->query("DROP TABLE IF EXISTS ".DB_PREFIX.$this->table);
 		$sql="CREATE TABLE ".DB_PREFIX.$this->table."(";
 		foreach($this->_fields as $col){
 			$sql.=$col->name." ".$col->dbattr.",";
@@ -54,7 +55,7 @@ class Editor extends Ext
 		}
 		$sql=substr($sql, 0,strlen($sql)-1).")";
 		// print_r($sql);
-		$this->db->query($sql);
+		$this->query($sql);
 		return $this;
 	}
 
@@ -186,10 +187,10 @@ class Editor extends Ext
 				if(isset($data['columns'])){
 					for ($i=0; $i < count($data['columns']); $i++) { 
 						$col=$data['columns'][$i];
-						if($col['data']){
-							$colmns[]=$this->getColumnName($col['data']);
-						}
-						$col['data']=$this->getColumnName($col['data']);
+						[$cln,$cl] = $this->getColumnName($col['data']);
+						$colmns[]=$cln;
+						$col['data']=$cln;
+						$mycolumnsarr[]=$cl;
 						if($col['data']){
 							if($col['searchable'] == 'true' && $col['search']['value']){
 								$cstr="";
@@ -235,7 +236,7 @@ class Editor extends Ext
 				$clstr="";
 				$options=array();
 				//print_r($this->_fields);
-				foreach($this->_fields as $col){
+				foreach($mycolumnsarr as $col){
 					if(!$clstr){
 						$clstr=$col->name." AS ".$col->altname;
 					}else{
@@ -326,7 +327,8 @@ class Editor extends Ext
 					"data"=>$mdata,
 					"fields"=>$this->_fields,
 					"options"=>$options,
-					"error"=>$this->_out['error']
+					"error"=>$this->_out['error'],
+					'sql'=>DEBUG ? $sql : null,
 				);
 			}
 		}
@@ -386,7 +388,7 @@ class Editor extends Ext
 	{
 		foreach($this->_fields as $col){
 			if($col->altname == $caltname){
-				return $col->name;
+				return [$col->name,$col];
 			}
 		}
 		return 0;
@@ -396,7 +398,7 @@ class Editor extends Ext
 		if(isset($criteria['criteria'])){
 			return $this->getCriteria($criteria);
 		}
-		$criteria['origData']=$this->getColumnName($criteria['origData']);
+		$criteria['origData']=$this->getColumnName($criteria['origData'])[0];
 		//print_r($criteria);
 		switch ($criteria['condition']) {
 			case 'starts':

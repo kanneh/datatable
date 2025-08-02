@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  app:
+    environment:
+      CONNECTION_STRING: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    build: 
+      context: .
+      dockerfile: Dockerfile
+
+    volumes:
+      - ../..:/workspaces:cached
+      
+    # Overrides default command so things don't shut down after the process ends.
+    command: sleep infinity
+
+    # Runs app on the same network as the database container, allows "forwardPorts" in devcontainer.json function.
+    network_mode: service:db
+
+    # Use "forwardPorts" in **devcontainer.json** to forward an app port locally. 
+    # (Adding the "ports" property to this file will not forward from a Codespace.)
+
+  db:
+    image: postgres:latest
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+
+    # Add "forwardPorts": ["5432"] to **devcontainer.json** to forward PostgreSQL locally.
+    # (Adding the "ports" property to this file will not forward from a Codespace.)
+
+  mysql_db: # Renamed from 'mysql' to avoid potential conflict with 'mysql' user/db
+    image: mysql:8.0 # You can specify a different MySQL version like mysql:8.0.38
+    restart: unless-stopped
+    volumes:
+      - mysql-data:/var/lib/mysql80/data
+      # Optional: To run initialization scripts (e.g., .sql files) on first start
+      # - ./init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: prince # IMPORTANT: Change this in production
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+    #ports:
+    # - "3307" # Map host port 3307 to container's 3306 to avoid conflict with other services
+    # Add "forwardPorts": ["3307"] to **devcontainer.json** to forward MySQL locally.
+
+
+
+volumes:
+  postgres-data:
+  mysql-data:
