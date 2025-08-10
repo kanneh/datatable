@@ -60,18 +60,15 @@ class Editor extends Ext
 		return $this;
 	}
 
-	public function WHERE($wherestr)
+	public function WHERE($wherestr,$params = [])
 	{
-		if(is_array($wherestr)){
-			foreach($wherestr as $whr){
-				$this->WHERE($whr);
-			}
-			return $this;
-		}
 		if(strlen($this->searchstr)>0){
 			$this->searchstr.=" AND ".$wherestr;
 		}else{
 			$this->searchstr=$wherestr;
+		}
+		for ($i = 0; $i < count($parame); ++$i) {
+			$this->searchParams[] = $parame[$i];
 		}
 		return $this;
 	}
