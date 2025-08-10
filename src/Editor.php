@@ -882,4 +882,3 @@ class Ext {
 		$inner[ $names[count($names)-1] ] = $value;
 	}
 }
->>>>>>> be20d6e (where function adjusted for parameterization)
