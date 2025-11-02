@@ -2,7 +2,7 @@
 const DEBUG = true;
 require_once __DIR__ . '/includes/models.php';
 
-$mdUsers->WHERE('id = ?')->searchParams = [$_GET['id'] ?? 1];
+// $mdUsers->WHERE('id = ?')->searchParams = [$_GET['id'] ?? 1];
 $mdUsers->process([
     'columns' => [
         [
@@ -21,5 +21,10 @@ $mdUsers->process([
         ['data' => 'created_at']
     ],
 
-])->json();
-echo json_encode($_GET);
+]);
+// ->json();
+// echo json_encode($_GET);
+
+print_r($mdVStudents->getSQL([]));
+
+print_r($mdVStudents->process([]));

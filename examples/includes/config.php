@@ -1,5 +1,5 @@
 <?php
 $MODULE = "stockmanager";
-$DRIVER = "mysql:host=mysql_db;dbname=appdb";
+$DRIVER = "mysql:host=localhost;dbname=appdb1";
 $DBUSER = "appuser";
 $DBPASSWORD = "apppassword";

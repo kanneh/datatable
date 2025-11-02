@@ -6,6 +6,61 @@ if(!defined('DB_PREFIX')){
 	define('DB_PREFIX',"");
 }
 
+class View extends Ext{
+	private $editors = [];
+	private ?string $viewName = null;
+
+	public function __construct(Editor $editor,?string $alias = null,array $excludeColumns=[],array $renameColumns=[]){ 
+		$this->addEditor($editor,$alias, $excludeColumns);
+	}
+
+	public function addEditor(Editor $editor,?string $alias = null, array $excludeColumns=[],array $renameColumns = [],array $joinCriteria = []): View{
+		if($alias === null || $alias === ''){
+			$alias = $editor->table;
+		}
+		$this->editors[] = [$alias, $editor, $excludeColumns, $renameColumns, $joinCriteria];
+		return $this;
+	}
+
+	public function getSQL($data): array {
+		$sql = "SELECT ";
+		$fromStr = " FROM ";
+		$params = [];
+		for($i = 0; $i < count($this->editors); $i++){
+			[$alias, $editor, $excludeColumns, $renameColumns, $joinCriteria] = $this->editors[$i];
+			
+			foreach($editor->_fields as $field){
+				if(in_array($field->altname,$excludeColumns)){
+					continue;
+				}
+				$colName = $field->altname;
+				$sql .= "$alias.$field->altname";
+				if(array_key_exists($colName,$renameColumns)){
+					$sql .= " AS ".$renameColumns[$colName];
+				}
+				$sql .= ", ";
+			}
+			if($i == 0){
+				$fromStr .= "(".$editor->getSelectQuery($data)[0].") AS $alias ";
+			}else{
+				$fromStr .= $joinCriteria[0]." (".$editor->getSelectQuery($data)[0].") AS $alias ON ".$joinCriteria[1]." ";
+			}
+
+			$params = array_merge($params,$editor->getParams());
+		}
+		$sql = substr($sql,0,strlen($sql)-2);
+		$sql .= $fromStr;
+		return [$sql, $params];
+	}
+
+	public function process($data){
+		[$sql,$params] = $this->getSQL($data);
+		// echo $sql;
+		return $this->editors[0][1]->select($sql,$params);
+	}
+}
+
+
 class Editor extends Ext
 {
 	public $data=array();
@@ -22,6 +77,10 @@ class Editor extends Ext
 	private $params = array();
 
 	public $searchParams = array();
+
+	public string $alias = '';
+
+	public array $excludeColumns = [];
 
 	function __construct($db, $tb,$id="id",$customDataProcessor=null)
 	{
@@ -58,6 +117,16 @@ class Editor extends Ext
 		return $this;
 	}
 
+
+	public function getColumns(): array{
+		$dbcolumns = array_map(fn($fld)=>$fld->name,$this->_fields);
+		$dbcolumns = array_filter($dbcolumns,fn($col)=>!in_array($col,$this->excludeColumns));
+		if($this->alias != ''){
+			$dbcolumns = array_map(fn($col)=>"$this->alias.$col",$dbcolumns);
+		}
+		return $dbcolumns;
+	}
+
 	public function WHERE($wherestr,$parame = [])
 	{
 		if(is_array($wherestr)){
@@ -75,6 +144,139 @@ class Editor extends Ext
 			$this->searchParams[] = $parame[$i];
 		}
 		return $this;
+	}
+
+	public function getSelectQuery($data): array{
+		//print_r($data);
+		$mycolumnsarr=[];
+		$colmns=[];
+		$colmnsfiler="";
+		$this->params=[];
+		if(isset($data['columns'])){
+			for ($i=0; $i < count($data['columns']); $i++) { 
+				$col=$data['columns'][$i];
+				if($col['data']){
+					$colmns[]=$this->getColumnName($col['data']);
+				}
+				$col['data']=$this->getColumnName($col['data']);
+				if($col['data']){
+					if(isset($col['searchable']) && $col['searchable'] == 'true' && isset($col['search']) && $col['search']['value']){
+						$cstr="";
+						if($data['search']['value']){
+							$cstr=" (".$col['data']." LIKE ? OR ".$col['data']." LIKE ?)";
+							$this->params[] = "%".$col['search']['value']."%";
+							$this->params[] = "%".$data['search']['value']."%";
+						}else{
+							$cstr=" ".$col['data']." LIKE ?";
+							$this->params[] = "%".$col['search']['value']."%";
+						}
+						if($colmnsfiler){
+							$colmnsfiler.=" AND".$cstr;
+						}else{
+							$colmnsfiler=$cstr;
+						}
+					}elseif(isset($col['searchable']) && $col['searchable'] == 'true' && isset($data['search']) && $data['search']['value']){
+						// print_r("Data search");
+						$cstr=" ".($col['data'])." LIKE ?";
+						$this->params[] = "%".$data['search']['value']."%";
+						if($colmnsfiler){
+							$colmnsfiler.=" OR".$cstr;
+						}else{
+							$colmnsfiler=$cstr;
+						}
+					}
+				}
+			}
+		}
+		$colmns=array_merge($colmns,array($this->_id));
+
+		$sql="SELECT ";
+
+		/*if($colmns){
+			$sql.=implode(",", $colmns);
+		}else{
+			$sql.="*";
+		}*/
+
+		$clstr="";
+		$options=array();
+		//print_r($this->_fields);
+		foreach($this->_fields as $col){
+			if(!$clstr){
+				$clstr=$col->name." AS ".$col->altname;
+			}else{
+				$clstr.=", ".$col->name." AS ".$col->altname;
+			}
+			if($col->hasoption){
+				$options[$col->altname]=$col->process($this->db);
+			}
+		}
+
+		// print_r($colmnsfiler);
+
+		if(!$clstr){
+			$clstr="*";
+		}
+
+		$sql.=$clstr;
+
+		$sql.=" FROM ".$this->table;
+		$filter="";
+		if($this->joinstr){
+			$sql.=$this->joinstr;
+		}
+		if ($colmnsfiler) {
+			$filter=" WHERE (".$colmnsfiler.")";
+		}
+
+		if(isset($data['searchBuilder'])){
+			if ($filter) {
+				$filter.=" AND (".$this->getCriteria($data['searchBuilder']).")";
+			}else{
+				$filter.=" WHERE (".$this->getCriteria($data['searchBuilder']).")";
+			}
+		}
+
+		$gfilter="";
+		$gsql=$sql;
+
+		if (strlen($this->searchstr)>0) {
+			if ($filter) {
+				$filter.=" AND (".$this->searchstr.")";
+			}else{
+				$filter.=" WHERE (".$this->searchstr.")";
+			}
+			$gfilter=" WHERE (".$this->searchstr.")";
+
+			for ($i=0; $i < count($this->searchParams); $i++) { 
+				$this->params[] = $this->searchParams[$i];
+			}
+		}
+
+		$sql.=$filter;
+
+		
+		if(isset($data['order'])){
+			$orderby="";
+			foreach ($data['order'] as $key) {
+				$orderby.=$colmns[$key['column']]." ".$key['dir'];
+			}
+			$sql.=" order by ".$orderby;
+
+		}
+
+		
+		if(isset($data['length'])){
+			if(intval($data['length'])>0){
+				$sql.=" LIMIT ".$data['start'].",".$data['length'];
+			}
+		}
+
+		return [$sql,$gsql,$gfilter,$filter,$options];
+	}
+
+	public function getParams(): array{
+		return $this->params;
 	}
 
 	public function process($data)
@@ -181,134 +383,8 @@ class Editor extends Ext
 					"data"=>$reqData
 				);
 			}else{
-				//print_r($data);
-				$mycolumnsarr=array();
-				$colmns=array();
-				$colmnsfiler="";
-				$this->params=array();
-				if(isset($data['columns'])){
-					for ($i=0; $i < count($data['columns']); $i++) { 
-						$col=$data['columns'][$i];
-						if($col['data']){
-							$colmns[]=$this->getColumnName($col['data']);
-						}
-						$col['data']=$this->getColumnName($col['data']);
-						if($col['data']){
-							if($col['searchable'] == 'true' && $col['search']['value']){
-								$cstr="";
-								if($data['search']['value']){
-									$cstr=" (".$col['data']." LIKE ? OR ".$col['data']." LIKE ?)";
-									$this->params[] = "%".$col['search']['value']."%";
-									$this->params[] = "%".$data['search']['value']."%";
-								}else{
-									$cstr=" ".$col['data']." LIKE ?";
-									$this->params[] = "%".$col['search']['value']."%";
-								}
-								if($colmnsfiler){
-									$colmnsfiler.=" AND".$cstr;
-								}else{
-									$colmnsfiler=$cstr;
-								}
-							}elseif($col['searchable'] == 'true' && $data['search']['value']){
-								// print_r("Data search");
-								$cstr=" ".($col['data'])." LIKE ?";
-								$this->params[] = "%".$data['search']['value']."%";
-								if($colmnsfiler){
-									$colmnsfiler.=" OR".$cstr;
-								}else{
-									$colmnsfiler=$cstr;
-								}
-							}
-						}
-					}
-				}
-				$colmns=array_merge($colmns,array($this->_id));
-
-
-
-
-				$sql="SELECT ";
-
-				/*if($colmns){
-					$sql.=implode(",", $colmns);
-				}else{
-					$sql.="*";
-				}*/
-
-				$clstr="";
-				$options=array();
-				//print_r($this->_fields);
-				foreach($this->_fields as $col){
-					if(!$clstr){
-						$clstr=$col->name." AS ".$col->altname;
-					}else{
-						$clstr.=", ".$col->name." AS ".$col->altname;
-					}
-					if($col->hasoption){
-						$options[$col->altname]=$col->process($this->db);
-					}
-				}
-
-				// print_r($colmnsfiler);
-
-				if(!$clstr){
-					$clstr="*";
-				}
-
-				$sql.=$clstr;
-
-				$sql.=" FROM ".$this->table;
-				$filter="";
-				if($this->joinstr){
-					$sql.=$this->joinstr;
-				}
-				if ($colmnsfiler) {
-					$filter=" WHERE (".$colmnsfiler.")";
-				}
-
-				if(isset($data['searchBuilder'])){
-					if ($filter) {
-						$filter.=" AND (".$this->getCriteria($data['searchBuilder']).")";
-					}else{
-						$filter.=" WHERE (".$this->getCriteria($data['searchBuilder']).")";
-					}
-				}
-
-				$gfilter="";
-				$gsql=$sql;
-
-				if (strlen($this->searchstr)>0) {
-					if ($filter) {
-						$filter.=" AND (".$this->searchstr.")";
-					}else{
-						$filter.=" WHERE (".$this->searchstr.")";
-					}
-					$gfilter=" WHERE (".$this->searchstr.")";
-
-					for ($i=0; $i < count($this->searchParams); $i++) { 
-						$this->params[] = $this->searchParams[$i];
-					}
-				}
-
-				$sql.=$filter;
-
 				
-				if(isset($data['order'])){
-					$orderby="";
-					foreach ($data['order'] as $key) {
-						$orderby.=$colmns[$key['column']]." ".$key['dir'];
-					}
-					$sql.=" order by ".$orderby;
-
-				}
-
-				
-				if(isset($data['length'])){
-					if(intval($data['length'])>0){
-						$sql.=" LIMIT ".$data['start'].",".$data['length'];
-					}
-				}
-
+				[$sql,$gsql,$gfilter,$filter,$options] = $this->getSelectQuery($data);
 				// echo $sql;
 				//print_r($this->db->getconnection());
 				// echo $sql;
