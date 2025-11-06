@@ -50,7 +50,8 @@ $mdStudents = Editor::inst(array(
 ->constraints("FOREIGN KEY (userid) REFERENCES users (id)");
 
 $mdVStudents = View::inst($mdStudents, 'std',['created_at','updated_at'])
-->addEditor($mdUsers,'u', ['id','created_at','updated_at','address'],[],['left join','std.userid = u.id']);
+->addEditor($mdUsers,'u', ['id','created_at','updated_at','address'],[],['left join','std.userid = u.id'])
+->name('vstudents');
 
 
 

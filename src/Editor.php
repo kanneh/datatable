@@ -10,6 +10,8 @@ class View extends Ext{
 	private $editors = [];
 	private ?string $viewName = null;
 
+	private ?string $wherestr = null;
+
 	public function __construct(Editor $editor,?string $alias = null,array $excludeColumns=[],array $renameColumns=[]){ 
 		$this->addEditor($editor,$alias, $excludeColumns);
 	}
@@ -19,6 +21,19 @@ class View extends Ext{
 			$alias = $editor->table;
 		}
 		$this->editors[] = [$alias, $editor, $excludeColumns, $renameColumns, $joinCriteria];
+		return $this;
+	}
+
+	public function WHERE($wherestr,$join = 'AND', $joinWith = 'AND'): View{
+		if(is_array($wherestr)){
+			$wherestr = implode(" $join ",$wherestr);
+		}
+		
+		if($this->wherestr === null){
+			$this->wherestr = $wherestr;
+		}else{
+			$this->wherestr .= " $joinWith ( $wherestr )";
+		}
 		return $this;
 	}
 
@@ -50,6 +65,9 @@ class View extends Ext{
 		}
 		$sql = substr($sql,0,strlen($sql)-2);
 		$sql .= $fromStr;
+		if($this->wherestr !== null){
+			$sql .= " WHERE ".$this->wherestr;
+		}
 		return [$sql, $params];
 	}
 
@@ -57,6 +75,49 @@ class View extends Ext{
 		[$sql,$params] = $this->getSQL($data);
 		// echo $sql;
 		return $this->editors[0][1]->select($sql,$params);
+	}
+
+	function json($data, $rprint = true){
+		$result = $this->process($data);
+		if(!$rprint){
+			return $result;
+		}
+		echo json_encode($result);
+	}
+
+	public function name($viewName): View{
+		$this->viewName = $viewName;
+		return $this;
+	}
+
+	function create($viewName = null): View{
+		if($viewName !== null){
+			$this->viewName = $viewName;
+		}
+		if($this->viewName === null){
+			throw new \Exception("View name not specified. Use name() method to set view name.");
+		}
+		[$sql,$params] = $this->getSQL([]);
+		$sql = "CREATE OR REPLACE VIEW ".$this->viewName." AS ".$sql;
+		$this->editors[0][1]->query($sql,$params);
+		return $this;
+	}
+
+	function drop($viewName = null){
+		if($viewName !== null){
+			$sql = "DROP VIEW IF EXISTS ".$viewName;
+			$this->editors[0][1]->query($sql);
+			return $this;
+		}
+		if(!$this->viewName){
+			throw new \Exception("View name not specified. Use name() method to set view name.");
+		}
+
+		if($this->viewName !== null){
+			$sql = "DROP VIEW IF EXISTS ".$this->viewName;
+			$this->editors[0][1]->query($sql);
+		}
+		return $this;
 	}
 }
 
@@ -114,6 +175,12 @@ class Editor extends Ext
 		$sql=substr($sql, 0,strlen($sql)-1).")";
 		// print_r($sql);
 		$this->query($sql);
+		return $this;
+	}
+
+	function drop()
+	{
+		$this->query("DROP TABLE IF EXISTS ".DB_PREFIX.$this->table);
 		return $this;
 	}
 
@@ -259,7 +326,11 @@ class Editor extends Ext
 		if(isset($data['order'])){
 			$orderby="";
 			foreach ($data['order'] as $key) {
-				$orderby.=$colmns[$key['column']]." ".$key['dir'];
+				if(is_int($key['column'])){
+					$orderby.=$colmns[$key['column']]." ".$key['dir'];
+				}else{
+					$orderby.=$this->getColumnName($key['column'])." ".$key['dir'];
+				}
 			}
 			$sql.=" order by ".$orderby;
 

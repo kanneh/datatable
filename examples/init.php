@@ -4,8 +4,16 @@ require_once __DIR__ . '/includes/models.php';
 
 $faker = Faker\Factory::create();
 
+
+//drop all tables foreign key checks
+$mdVStudents->drop('view_students');
+$mdStudents->drop();
+$mdUsers->drop();
+$mdVStudents->name('vstudents');
+
 $mdUsers->create();
 $mdStudents->create();
+$mdVStudents->create();
 
 $mdUsers->process([
     'username' => $faker->userName(),
