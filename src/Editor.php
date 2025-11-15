@@ -863,7 +863,8 @@ class Options extends Ext
 		if (strlen($this->searchstr)>0) {
 			$this->searchstr=" WHERE ".$this->searchstr;
 		}
-		$dbdata=$db->select($this->table,array($this->textcolumn,$this->valuecolumn),$this->searchstr)->rows;
+		$sql = "SELECT ".$this->textcolumn.", ".$this->valuecolumn." FROM ".$this->table.$this->searchstr;
+		$dbdata=$db->select($sql);
 		$rdata=array();
 		foreach ($dbdata as $dt) {
 			$rdata[]=array(
