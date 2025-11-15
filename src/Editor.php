@@ -275,7 +275,7 @@ class Editor extends Ext
 				$clstr.=", ".$col->name." AS ".$col->altname;
 			}
 			if($col->hasoption){
-				$options[$col->altname]=$col->process($this->db);
+				$options[$col->altname]=$col->process($this);
 			}
 		}
 
