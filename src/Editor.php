@@ -42,6 +42,7 @@ class View extends Ext{
 		$gfrom = " FROM ";
 		$ffrom = " FROM ";
 		$fromStr = " FROM ";
+		$gsql ="";
 		$params = [];
 		$gparams = [];
 		$options = [];
@@ -75,15 +76,16 @@ class View extends Ext{
 			$gparams = array_merge($gparams,$editor->searchParams);
 		}
 		$sql = substr($sql,0,strlen($sql)-2);
+		$gsql = $sql;
 		$sql .= $fromStr;
 		if($this->wherestr !== null){
 			$sql .= " WHERE ".$this->wherestr;
 		}
-		return [$sql, $gfrom,$ffrom, $params, $gparams,$options];
+		return [$sql, $gsql, $gfrom,$ffrom, $params, $gparams,$options];
 	}
 
 	public function process($data){
-		[$sql, $gfrom,$ffrom, $params, $gparams,$options] = $this->getSQL($data);
+		[$sql, $gsql, $gfrom,$ffrom, $params, $gparams,$options] = $this->getSQL($data);
 		// echo $sql;
 		$mdata = $this->editors[0][1]->select($sql,$params);
 		for ($i=0; $i < count($mdata); $i++) { 
@@ -95,8 +97,8 @@ class View extends Ext{
 		}
 		return [
 			"draw"=>$draw,
-			"recordsTotal"=>count($this->editors[0][1]->select($sql.$gfrom,$gparams)),
-			"recordsFiltered"=>count($this->editors[0][1]->select($sql.$ffrom,$params)),
+			"recordsTotal"=>count($this->editors[0][1]->select($gsql.$gfrom,$gparams)),
+			"recordsFiltered"=>count($this->editors[0][1]->select($gsql.$ffrom,$params)),
 			"data"=>$mdata,
 			"options"=>$options,
 			"error"=>$this->editors[0][1]->_out['error']
