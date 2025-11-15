@@ -39,8 +39,12 @@ class View extends Ext{
 
 	public function getSQL($data): array {
 		$sql = "SELECT ";
+		$gfrom = " FROM ";
+		$ffrom = " FROM ";
 		$fromStr = " FROM ";
 		$params = [];
+		$gparams = [];
+		$options = [];
 		for($i = 0; $i < count($this->editors); $i++){
 			[$alias, $editor, $excludeColumns, $renameColumns, $joinCriteria] = $this->editors[$i];
 			
@@ -55,26 +59,48 @@ class View extends Ext{
 				}
 				$sql .= ", ";
 			}
+			[$esql,$egsql,$egfilter,$efilter,$eoptions] = $editor->getSelectQuery($data);
+			$options = array_merge($options,$eoptions);
 			if($i == 0){
-				$fromStr .= "(".$editor->getSelectQuery($data)[0].") AS $alias ";
+				$fromStr .= "($esql) AS $alias ";
+				$gfrom .= "($egsql.$egfilter) AS $alias ";
+				$ffrom .= "($egsql.$efilter) AS $alias ";
 			}else{
-				$fromStr .= $joinCriteria[0]." (".$editor->getSelectQuery($data)[0].") AS $alias ON ".$joinCriteria[1]." ";
+				$fromStr .= $joinCriteria[0]." ($esql) AS $alias ON ".$joinCriteria[1]." ";
+				$gfrom .= $joinCriteria[0]." ($egsql.$egfilter) AS $alias ON ".$joinCriteria[1]." ";
+				$ffrom .= $joinCriteria[0]." ($egsql.$efilter) AS $alias ON ".$joinCriteria[1]." ";
 			}
 
 			$params = array_merge($params,$editor->getParams());
+			$gparams = array_merge($gparams,$editor->searchParams);
 		}
 		$sql = substr($sql,0,strlen($sql)-2);
 		$sql .= $fromStr;
 		if($this->wherestr !== null){
 			$sql .= " WHERE ".$this->wherestr;
 		}
-		return [$sql, $params];
+		return [$sql, $gfrom,$ffrom, $params, $gparams,$options];
 	}
 
 	public function process($data){
-		[$sql,$params] = $this->getSQL($data);
+		[$sql, $gfrom,$ffrom, $params, $gparams,$options] = $this->getSQL($data);
 		// echo $sql;
-		return $this->editors[0][1]->select($sql,$params);
+		$mdata = $this->editors[0][1]->select($sql,$params);
+		for ($i=0; $i < count($mdata); $i++) { 
+			$mdata[$i]=array_merge($mdata[$i],array('DT_RowId'=>"row_".$mdata[$i][$this->editors[0][1]->_id]));
+		}
+		$draw=0;
+		if(isset($data['draw'])){
+			$draw=intval($data['draw']);
+		}
+		return [
+			"draw"=>$draw,
+			"recordsTotal"=>count($this->editors[0][1]->select($sql.$gfrom,$gparams)),
+			"recordsFiltered"=>count($this->editors[0][1]->select($sql.$ffrom,$params)),
+			"data"=>$mdata,
+			"options"=>$options,
+			"error"=>$this->editors[0][1]->_out['error']
+		];
 	}
 
 	function json($data, $rprint = true){
