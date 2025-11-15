@@ -64,12 +64,12 @@ class View extends Ext{
 			$options = array_merge($options,$eoptions);
 			if($i == 0){
 				$fromStr .= "($esql) AS $alias ";
-				$gfrom .= "($egsql.$egfilter) AS $alias ";
-				$ffrom .= "($egsql.$efilter) AS $alias ";
+				$gfrom .= "($egsql$egfilter) AS $alias ";
+				$ffrom .= "($egsql$efilter) AS $alias ";
 			}else{
 				$fromStr .= $joinCriteria[0]." ($esql) AS $alias ON ".$joinCriteria[1]." ";
-				$gfrom .= $joinCriteria[0]." ($egsql.$egfilter) AS $alias ON ".$joinCriteria[1]." ";
-				$ffrom .= $joinCriteria[0]." ($egsql.$efilter) AS $alias ON ".$joinCriteria[1]." ";
+				$gfrom .= $joinCriteria[0]." ($egsql$egfilter) AS $alias ON ".$joinCriteria[1]." ";
+				$ffrom .= $joinCriteria[0]." ($egsql$efilter) AS $alias ON ".$joinCriteria[1]." ";
 			}
 
 			$params = array_merge($params,$editor->getParams());
@@ -98,7 +98,9 @@ class View extends Ext{
 		return [
 			"draw"=>$draw,
 			"recordsTotal"=>count($this->editors[0][1]->select($gsql.$gfrom,$gparams)),
+			// "recordsTotalsql"=>$gsql.$gfrom,
 			"recordsFiltered"=>count($this->editors[0][1]->select($gsql.$ffrom,$params)),
+			// "recordsFilteredsql"=>$gsql.$ffrom,
 			"data"=>$mdata,
 			"options"=>$options,
 			"error"=>$this->editors[0][1]->_out['error']

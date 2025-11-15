@@ -4,6 +4,7 @@ require_once __DIR__ . '/config.php';
 
 use Kanneh\Datatable\Editor,
     Kanneh\Datatable\Field,
+    Kanneh\Datatable\Options,
     Kanneh\Datatable\View;
 
 $mdUsers = Editor::inst(array(
@@ -41,7 +42,8 @@ $mdStudents = Editor::inst(array(
     Field::inst('regno','regno')
         ->dbAttr('VARCHAR(100)'),
     Field::inst('userid','userid')
-        ->dbAttr('INT'),
+        ->dbAttr('INT')
+        ->option(Options::inst("users","id","fullname")),
     Field::inst('created_at','created_at')
         ->dbAttr('DATETIME DEFAULT CURRENT_TIMESTAMP'),
     Field::inst('updated_at','updated_at')
