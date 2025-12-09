@@ -98,11 +98,13 @@ class View extends Ext{
 		$sql .= $fromStr;
 		if($this->wherestr !== null){
 			$sql .= " WHERE ".$this->wherestr;
+			$gfrom .= " WHERE ".$this->wherestr;
+			$ffrom .= " WHERE ".$this->wherestr;
 		}
 
 		$params = array_merge($params,$this->params);
 		$gparams = array_merge($gparams,$this->params);
-		
+
 		return [$sql, $gsql, $gfrom,$ffrom, $params, $gparams,$options];
 	}
 
