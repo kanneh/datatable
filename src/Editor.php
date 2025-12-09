@@ -12,6 +12,8 @@ class View extends Ext{
 
 	private ?string $wherestr = null;
 
+	private ?array $params = [];
+
 	public function __construct(Editor $editor,?string $alias = null,array $excludeColumns=[],array $renameColumns=[]){ 
 		$this->addEditor($editor,$alias, $excludeColumns);
 	}
@@ -21,6 +23,22 @@ class View extends Ext{
 			$alias = $editor->table;
 		}
 		$this->editors[] = [$alias, $editor, $excludeColumns, $renameColumns, $joinCriteria];
+		return $this;
+	}
+
+	public function WHERE_Paramed($wherestr,$params=[],$join = 'AND', $joinWith = 'AND'): View{
+		if(is_array($wherestr)){
+			$wherestr = implode(" $join ",$wherestr);
+		}
+		
+		if($this->wherestr === null){
+			$this->wherestr = $wherestr;
+		}else{
+			$this->wherestr .= " $joinWith ( $wherestr )";
+		}
+		for ($i = 0; $i < count($params); ++$i) {
+			$this->params[] = $params[$i];
+		}
 		return $this;
 	}
 
@@ -81,6 +99,10 @@ class View extends Ext{
 		if($this->wherestr !== null){
 			$sql .= " WHERE ".$this->wherestr;
 		}
+
+		$params = array_merge($params,$this->params);
+		$gparams = array_merge($gparams,$this->params);
+		
 		return [$sql, $gsql, $gfrom,$ffrom, $params, $gparams,$options];
 	}
 
